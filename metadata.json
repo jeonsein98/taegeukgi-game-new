@@ -1,0 +1,6 @@
+{
+  "name": "태극기 구성요소 맞추기",
+  "description": "대한민국 태극기 구성요소 맞추기 게임 (1단계 터치 모드, 2단계 드래그 모드, 3단계 4괘 막대 조립 모드, Gemini AI 연동)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

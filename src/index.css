@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@layer base {
+  html, body {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior-y: contain;
+    font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Font styling for playful kids titles */
+  h1, h2, h3, .font-kids {
+    font-family: 'Jua', 'Noto Sans KR', sans-serif;
+  }
+}
+
+/* Touch dragging smoothness on iOS Safari */
+.touch-none {
+  touch-action: none;
+  -webkit-user-drag: none;
+}
