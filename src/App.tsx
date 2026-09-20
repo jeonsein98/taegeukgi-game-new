@@ -24,6 +24,7 @@ import {
   Maximize2,
   Minimize2,
   Home,
+  Music,
 } from 'lucide-react';
 
 type AppScreen = 'start' | 'stage-select' | 'playing';
@@ -32,6 +33,7 @@ export default function App() {
   // Screen management: 'start' (게임 스타트 화면) -> 'stage-select' (스테이지 선택) -> 'playing' (게임 진행)
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('start');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isBgmMuted, setIsBgmMuted] = useState<boolean>(false);
 
   // 1단계, 2단계, 3단계 지원
   const [mode, setMode] = useState<GameMode>('level1');
@@ -197,7 +199,11 @@ export default function App() {
   useEffect(() => {
     const handleFsChange = () => {
       const doc = document as any;
-      setIsFullscreen(Boolean(doc.fullscreenElement || doc.webkitFullscreenElement));
+      const isNativeFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+      // If native fullscreen was dismissed via system gesture or Esc, sync state
+      if (!isNativeFs) {
+        setIsFullscreen(false);
+      }
     };
     document.addEventListener('fullscreenchange', handleFsChange);
     document.addEventListener('webkitfullscreenchange', handleFsChange);
@@ -209,14 +215,18 @@ export default function App() {
 
   const toggleFullscreen = () => {
     const doc = document as any;
-    const docEl = document.documentElement as any;
-    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
-      if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch(() => {});
-      } else if (docEl.webkitRequestFullscreen) {
-        docEl.webkitRequestFullscreen();
+    const rootEl = (document.getElementById('app-root') || document.documentElement) as any;
+    const isCurrentlyFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || isFullscreen);
+
+    if (!isCurrentlyFs) {
+      setIsFullscreen(true);
+      if (rootEl.requestFullscreen) {
+        rootEl.requestFullscreen().catch(() => {});
+      } else if (rootEl.webkitRequestFullscreen) {
+        rootEl.webkitRequestFullscreen();
       }
     } else {
+      setIsFullscreen(false);
       if (doc.exitFullscreen) {
         doc.exitFullscreen().catch(() => {});
       } else if (doc.webkitExitFullscreen) {
@@ -225,13 +235,42 @@ export default function App() {
     }
   };
 
-  // Toggle mute
+  // Toggle sound effects
   const toggleMute = () => {
     const next = !isMuted;
     setIsMuted(next);
     sounds.isMuted = next;
-    if (!next) sounds.playSelect();
+    if (!next) {
+      sounds.playSelect();
+      if (!isBgmMuted) {
+        sounds.startBgm();
+      }
+    } else {
+      sounds.stopBgm();
+    }
   };
+
+  // Toggle Arcade BGM
+  const toggleBgm = () => {
+    sounds.unlockAudio();
+    const active = sounds.toggleBgm();
+    setIsBgmMuted(!active);
+    if (active) {
+      sounds.playSelect();
+      if (isMuted) {
+        setIsMuted(false);
+        sounds.isMuted = false;
+      }
+    }
+  };
+
+  // Ensure BGM plays while playing the game if not muted
+  useEffect(() => {
+    if (currentScreen === 'playing' && !isBgmMuted && !isMuted) {
+      sounds.unlockAudio();
+      sounds.startBgm();
+    }
+  }, [currentScreen, isBgmMuted, isMuted]);
 
   // Check Level 3 completion
   const checkLevel3Victory = (
@@ -578,84 +617,65 @@ export default function App() {
 
   // Level 3: Drag & Drop End for Bars
   const handleDragEndBar = (barType: BarType, clientX: number, clientY: number) => {
-    const boardEl = boardContainerRef.current;
+    const boardEl = boardContainerRef.current || document.getElementById('taegeukgi-flag-board');
     if (!boardEl) return;
 
     const bRect = boardEl.getBoundingClientRect();
-    const pageLeft = bRect.left + window.scrollX;
-    const pageTop = bRect.top + window.scrollY;
-
-    const coordCandidates = [
-      { relX: clientX - bRect.left, relY: clientY - bRect.top },
-      { relX: clientX - pageLeft, relY: clientY - pageTop },
-    ];
-
     let bestMatchingKey: BarSlotKey | null = null;
-    let lastSvgX = 450;
-    let lastSvgY = 300;
+    let minScreenDist = Math.max(140, bRect.width * 0.22); // generous hit radius for iPad touch
 
-    for (const { relX, relY } of coordCandidates) {
-      if (bestMatchingKey !== null) break;
-
-      if (
-        relX >= -160 &&
-        relX <= bRect.width + 160 &&
-        relY >= -160 &&
-        relY <= bRect.height + 160
-      ) {
-        const svgX = (relX / bRect.width) * 900;
-        const svgY = (relY / bRect.height) * 600;
-        lastSvgX = svgX;
-        lastSvgY = svgY;
-
-        // First: Look for closest unplaced slot matching barType with very generous tolerance (280 units)
-        let minMatchingDist = 280;
-
-        for (const key of ALL_BAR_SLOT_KEYS) {
-          if (!placedBars[key]) {
-            const slot = BAR_SLOTS[key];
-            if (slot.requiredType === barType) {
-              const dist = Math.hypot(svgX - slot.cx, svgY - slot.cy);
-              if (dist < minMatchingDist) {
-                minMatchingDist = dist;
-                bestMatchingKey = key;
-              }
-            }
+    // 1. Check exact slot centers in client coordinate space
+    for (const key of ALL_BAR_SLOT_KEYS) {
+      if (!placedBars[key]) {
+        const slot = BAR_SLOTS[key];
+        if (slot.requiredType === barType) {
+          const slotScreenX = bRect.left + (slot.cx / 900) * bRect.width;
+          const slotScreenY = bRect.top + (slot.cy / 600) * bRect.height;
+          const dist = Math.hypot(clientX - slotScreenX, clientY - slotScreenY);
+          if (dist < minScreenDist) {
+            minScreenDist = dist;
+            bestMatchingKey = key;
           }
         }
+      }
+    }
 
-        // Quadrant assistance if dropped in the general vicinity of a trigram:
-        if (!bestMatchingKey) {
-          if (barType === 'solid') {
-            // 건괘 (좌상단): 3줄 모두 solid
-            if (svgX <= 490 && svgY <= 340) {
-              const geonSlots: BarSlotKey[] = ['geon-0', 'geon-1', 'geon-2'];
-              bestMatchingKey = geonSlots.find((k) => !placedBars[k]) || null;
-            }
-            // 감괘 (우상단): 가운데 줄(gam-1) solid
-            else if (svgX >= 410 && svgY <= 340 && !placedBars['gam-1']) {
-              bestMatchingKey = 'gam-1';
-            }
-            // 리괘 (좌하단): 위쪽(ri-0), 아래쪽(ri-2) solid
-            else if (svgX <= 490 && svgY >= 260) {
-              const riSolid: BarSlotKey[] = ['ri-0', 'ri-2'];
-              bestMatchingKey = riSolid.find((k) => !placedBars[k]) || null;
-            }
-          } else if (barType === 'broken') {
-            // 곤괘 (우하단): 3줄 모두 broken
-            if (svgX >= 410 && svgY >= 260) {
-              const gonSlots: BarSlotKey[] = ['gon-0', 'gon-1', 'gon-2'];
-              bestMatchingKey = gonSlots.find((k) => !placedBars[k]) || null;
-            }
-            // 감괘 (우상단): 위쪽(gam-0), 아래쪽(gam-2) broken
-            else if (svgX >= 410 && svgY <= 340) {
-              const gamBroken: BarSlotKey[] = ['gam-0', 'gam-2'];
-              bestMatchingKey = gamBroken.find((k) => !placedBars[k]) || null;
-            }
-            // 리괘 (좌하단): 가운데 줄(ri-1) broken
-            else if (svgX <= 490 && svgY >= 260 && !placedBars['ri-1']) {
-              bestMatchingKey = 'ri-1';
-            }
+    // 2. If no direct slot center hit, check quadrant proximity on the board
+    if (!bestMatchingKey) {
+      const relX = (clientX - bRect.left) / bRect.width;
+      const relY = (clientY - bRect.top) / bRect.height;
+
+      // Allow generous margins around board (-0.2 to 1.2)
+      if (relX >= -0.2 && relX <= 1.2 && relY >= -0.2 && relY <= 1.2) {
+        if (barType === 'solid') {
+          // 건괘 (좌상단): 3줄 모두 solid
+          if (relX <= 0.52 && relY <= 0.52) {
+            const geonSlots: BarSlotKey[] = ['geon-0', 'geon-1', 'geon-2'];
+            bestMatchingKey = geonSlots.find((k) => !placedBars[k]) || null;
+          }
+          // 감괘 (우상단): 가운데 줄(gam-1) solid
+          else if (relX >= 0.48 && relY <= 0.52 && !placedBars['gam-1']) {
+            bestMatchingKey = 'gam-1';
+          }
+          // 리괘 (좌하단): 위쪽(ri-0), 아래쪽(ri-2) solid
+          else if (relX <= 0.52 && relY >= 0.48) {
+            const riSolid: BarSlotKey[] = ['ri-0', 'ri-2'];
+            bestMatchingKey = riSolid.find((k) => !placedBars[k]) || null;
+          }
+        } else if (barType === 'broken') {
+          // 곤괘 (우하단): 3줄 모두 broken
+          if (relX >= 0.48 && relY >= 0.48) {
+            const gonSlots: BarSlotKey[] = ['gon-0', 'gon-1', 'gon-2'];
+            bestMatchingKey = gonSlots.find((k) => !placedBars[k]) || null;
+          }
+          // 감괘 (우상단): 위쪽(gam-0), 아래쪽(gam-2) broken
+          else if (relX >= 0.48 && relY <= 0.52) {
+            const gamBroken: BarSlotKey[] = ['gam-0', 'gam-2'];
+            bestMatchingKey = gamBroken.find((k) => !placedBars[k]) || null;
+          }
+          // 리괘 (좌하단): 가운데 줄(ri-1) broken
+          else if (relX <= 0.52 && relY >= 0.48 && !placedBars['ri-1']) {
+            bestMatchingKey = 'ri-1';
           }
         }
       }
@@ -692,11 +712,13 @@ export default function App() {
 
     // Look for closest wrong slot to provide helpful guidance
     let closestWrongSlot: (typeof BAR_SLOTS)[BarSlotKey] | null = null;
-    let minWrongDist = 200;
+    let minWrongDist = Math.max(140, bRect.width * 0.22);
     for (const key of ALL_BAR_SLOT_KEYS) {
       if (!placedBars[key]) {
         const slot = BAR_SLOTS[key];
-        const dist = Math.hypot(lastSvgX - slot.cx, lastSvgY - slot.cy);
+        const slotScreenX = bRect.left + (slot.cx / 900) * bRect.width;
+        const slotScreenY = bRect.top + (slot.cy / 600) * bRect.height;
+        const dist = Math.hypot(clientX - slotScreenX, clientY - slotScreenY);
         if (dist < minWrongDist) {
           minWrongDist = dist;
           closestWrongSlot = slot;
@@ -757,136 +779,159 @@ export default function App() {
     celebrationHeroes[Math.max(0, victoryCount - 1) % celebrationHeroes.length];
 
   // =========================================================================
-  // 1. SCREEN 1: Start Screen ("게임 스타트!" landing page)
+  // PERSISTENT ROOT CONTAINER (Prevents iPad fullscreen drop on screen transitions)
   // =========================================================================
-  if (currentScreen === 'start') {
-    return (
-      <div className="h-[100dvh] max-h-[100dvh] w-full overflow-hidden">
-        <StartScreen
-          onStartGame={() => {
-            sounds.playSelect();
-            setCurrentScreen('stage-select');
-          }}
-          onOpenLeaderboard={() => setShowLeaderboardHeaderModal(true)}
-          isMuted={isMuted}
-          onToggleMute={toggleMute}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-        />
-
-        {/* Standalone Arcade Leaderboard */}
-        <ArcadeLeaderboard
-          isOpen={showLeaderboardHeaderModal}
-          onClose={() => setShowLeaderboardHeaderModal(false)}
-          initialFilterMode={mode}
-        />
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 2. SCREEN 2: Stage Selection Screen (1단계, 2단계, 3단계 선택)
-  // =========================================================================
-  if (currentScreen === 'stage-select') {
-    return (
-      <div className="h-[100dvh] max-h-[100dvh] w-full overflow-y-auto bg-gradient-to-b from-blue-50 via-slate-50 to-amber-50 flex flex-col justify-between p-3 sm:p-5 select-none">
-        {/* Top bar in Stage Selection */}
-        <div className="w-full max-w-4xl mx-auto flex items-center justify-between gap-2 shrink-0 mb-3">
-          <button
-            type="button"
-            onClick={() => {
+  return (
+    <div
+      id="app-root"
+      className={`relative w-full h-[100dvh] max-h-[100dvh] overflow-hidden select-none bg-slate-100 text-slate-800 ${
+        isFullscreen ? 'fixed inset-0 z-50 w-screen h-[100dvh]' : ''
+      }`}
+    >
+      {/* 1. SCREEN 1: Start Screen ("게임 스타트!" landing page) */}
+      {currentScreen === 'start' && (
+        <div className="h-full w-full overflow-hidden">
+          <StartScreen
+            onStartGame={() => {
               sounds.playSelect();
-              setCurrentScreen('start');
+              if (!isBgmMuted && !isMuted) {
+                sounds.startBgm();
+              }
+              setCurrentScreen('stage-select');
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
-          >
-            <Home className="w-3.5 h-3.5 text-blue-600" />
-            <span>처음 화면으로</span>
-          </button>
+            onOpenLeaderboard={() => setShowLeaderboardHeaderModal(true)}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+            isBgmMuted={isBgmMuted}
+            onToggleBgm={toggleBgm}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+          />
+        </div>
+      )}
 
-          <div className="flex items-center gap-2">
-            {/* iPad Fullscreen Toggle */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
-              title="아이패드 화면을 꽉 채워요!"
-            >
-              {isFullscreen ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="hidden sm:inline">화면 원래대로</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="hidden sm:inline">화면 꽉 채우기</span>
-                  <span className="sm:hidden">⛶</span>
-                </>
-              )}
-            </button>
-
-            {/* Sound Toggle */}
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 cursor-pointer shadow-xs"
-            >
-              {isMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-emerald-600" />}
-            </button>
-
-            {/* Leaderboard */}
+      {/* 2. SCREEN 2: Stage Selection Screen (1단계, 2단계, 3단계 선택) */}
+      {currentScreen === 'stage-select' && (
+        <div className="h-full w-full overflow-y-auto bg-gradient-to-b from-blue-50 via-slate-50 to-amber-50 flex flex-col justify-between p-3 sm:p-5 select-none">
+          {/* Top bar in Stage Selection */}
+          <div className="w-full max-w-4xl mx-auto flex items-center justify-between gap-2 shrink-0 mb-3">
             <button
               type="button"
               onClick={() => {
                 sounds.playSelect();
-                setShowLeaderboardHeaderModal(true);
+                setCurrentScreen('start');
               }}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black flex items-center gap-1 shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
             >
-              <Trophy className="w-3.5 h-3.5 text-amber-200" />
-              <span className="hidden sm:inline">명예의 전당</span>
-              <span>🏆</span>
+              <Home className="w-3.5 h-3.5 text-blue-600" />
+              <span>처음 화면으로</span>
             </button>
+
+            <div className="flex items-center gap-2">
+              {/* iPad Fullscreen Toggle */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
+                title="아이패드 화면을 꽉 채워요!"
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="hidden sm:inline">화면 원래대로</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="hidden sm:inline">화면 꽉 채우기</span>
+                    <span className="sm:hidden">⛶</span>
+                  </>
+                )}
+              </button>
+
+              {/* Arcade BGM Toggle */}
+              <button
+                type="button"
+                onClick={toggleBgm}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all ${
+                  !isBgmMuted
+                    ? 'bg-amber-100 text-amber-900 border-amber-400 ring-2 ring-amber-300/70'
+                    : 'bg-white text-slate-500 border-slate-300'
+                }`}
+                title={!isBgmMuted ? '오락실 배경음악 끄기' : '오락실 배경음악 켜기'}
+              >
+                {!isBgmMuted ? (
+                  <>
+                    <span className="flex items-end gap-0.5 h-3">
+                      <span className="w-1 bg-amber-600 rounded-full h-2 animate-pulse" />
+                      <span className="w-1 bg-amber-600 rounded-full h-3 animate-pulse [animation-delay:150ms]" />
+                      <span className="w-1 bg-amber-600 rounded-full h-1.5 animate-pulse [animation-delay:300ms]" />
+                    </span>
+                    <span>음악 ON 🎵</span>
+                  </>
+                ) : (
+                  <>
+                    <Music className="w-3.5 h-3.5 text-slate-400" />
+                    <span>음악 OFF</span>
+                  </>
+                )}
+              </button>
+
+              {/* Sound Toggle */}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 cursor-pointer shadow-xs"
+                title={isMuted ? '효과음 켜기' : '효과음 끄기'}
+              >
+                {isMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-emerald-600" />}
+              </button>
+
+              {/* Leaderboard */}
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playSelect();
+                  setShowLeaderboardHeaderModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black flex items-center gap-1 shadow-xs cursor-pointer"
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-200" />
+                <span className="hidden sm:inline">명예의 전당</span>
+                <span>🏆</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Center: Stage Selection Modal / Component */}
+          <div className="my-auto w-full max-w-3xl mx-auto">
+            <ModeSelector
+              currentMode={mode}
+              onSelectMode={(newMode) => {
+                setMode(newMode);
+                setHasSelectedInitialStage(true);
+                setCurrentScreen('playing');
+                if (!isBgmMuted && !isMuted) {
+                  sounds.startBgm();
+                }
+                initGame();
+              }}
+              showHints={showHints}
+              onToggleHints={setShowHints}
+              isFirstScreen={!hasSelectedInitialStage}
+              onBackToStart={() => setCurrentScreen('start')}
+            />
+          </div>
+
+          <div className="text-center text-xs font-medium text-slate-500 py-2 shrink-0">
+            🇰🇷 대한민국 태극기 맞추기 놀이
           </div>
         </div>
+      )}
 
-        {/* Center: Stage Selection Modal / Component */}
-        <div className="my-auto w-full max-w-3xl mx-auto">
-          <ModeSelector
-            currentMode={mode}
-            onSelectMode={(newMode) => {
-              setMode(newMode);
-              setHasSelectedInitialStage(true);
-              setCurrentScreen('playing');
-              initGame();
-            }}
-            showHints={showHints}
-            onToggleHints={setShowHints}
-            isFirstScreen={!hasSelectedInitialStage}
-            onBackToStart={() => setCurrentScreen('start')}
-          />
-        </div>
-
-        <div className="text-center text-xs font-medium text-slate-500 py-2 shrink-0">
-          🇰🇷 대한민국 태극기 맞추기 놀이
-        </div>
-
-        {/* Standalone Arcade Leaderboard */}
-        <ArcadeLeaderboard
-          isOpen={showLeaderboardHeaderModal}
-          onClose={() => setShowLeaderboardHeaderModal(false)}
-          initialFilterMode={mode}
-        />
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 3. SCREEN 3: Playing Screen (Fits iPad screen 100% without scroll)
-  // =========================================================================
-  return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full bg-slate-100 text-slate-800 flex flex-col justify-between overflow-hidden selection:bg-amber-200">
+      {/* 3. SCREEN 3: Playing Screen (Fits iPad screen 100% without scroll) */}
+      {currentScreen === 'playing' && (
+        <div className="h-full w-full bg-slate-100 text-slate-800 flex flex-col justify-between overflow-hidden selection:bg-amber-200">
       {/* Top Navigation Bar */}
       <header className="bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-3 sm:px-4 py-2 sticky top-0 z-40 shadow-xs shrink-0">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
@@ -992,12 +1037,40 @@ export default function App() {
               <span>단계 선택</span>
             </button>
 
+            {/* Arcade BGM Toggle */}
+            <button
+              type="button"
+              onClick={toggleBgm}
+              className={`px-2.5 py-1 rounded-xl border text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all ${
+                !isBgmMuted
+                  ? 'bg-amber-100 text-amber-900 border-amber-400 ring-2 ring-amber-300/70'
+                  : 'bg-white text-slate-500 border-slate-300'
+              }`}
+              title={!isBgmMuted ? '오락실 배경음악 끄기' : '오락실 배경음악 켜기'}
+            >
+              {!isBgmMuted ? (
+                <>
+                  <span className="flex items-end gap-0.5 h-3">
+                    <span className="w-1 bg-amber-600 rounded-full h-2 animate-pulse" />
+                    <span className="w-1 bg-amber-600 rounded-full h-3 animate-pulse [animation-delay:150ms]" />
+                    <span className="w-1 bg-amber-600 rounded-full h-1.5 animate-pulse [animation-delay:300ms]" />
+                  </span>
+                  <span>음악 ON 🎵</span>
+                </>
+              ) : (
+                <>
+                  <Music className="w-3.5 h-3.5 text-slate-400" />
+                  <span>음악 OFF</span>
+                </>
+              )}
+            </button>
+
             {/* Sound Toggle */}
             <button
               type="button"
               onClick={toggleMute}
               className="p-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 cursor-pointer shadow-xs transition-colors"
-              title={isMuted ? '소리 켜기' : '소리 끄기'}
+              title={isMuted ? '효과음 켜기' : '효과음 끄기'}
               aria-label="소리 토글"
             >
               {isMuted ? (
@@ -1107,6 +1180,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+        </div>
+      )}
 
       {/* Completion Modal with Gemini AI praise, OX Quiz, and Google Sheets logger */}
       {isCompleted && (

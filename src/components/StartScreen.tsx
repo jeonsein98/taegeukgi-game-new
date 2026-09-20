@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, Trophy, Volume2, VolumeX, Maximize2, Minimize2, Play, Heart, Star } from 'lucide-react';
+import { Sparkles, Trophy, Volume2, VolumeX, Maximize2, Minimize2, Play, Heart, Star, Music } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
 interface StartScreenProps {
@@ -10,6 +10,8 @@ interface StartScreenProps {
   onToggleMute: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  isBgmMuted?: boolean;
+  onToggleBgm?: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -19,6 +21,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onToggleMute,
   isFullscreen,
   onToggleFullscreen,
+  isBgmMuted = false,
+  onToggleBgm,
 }) => {
   return (
     <div className="relative w-full h-full min-h-[100dvh] flex flex-col justify-between items-center bg-gradient-to-b from-blue-50 via-slate-50 to-red-50 text-slate-800 p-4 sm:p-6 overflow-x-hidden select-none">
@@ -84,12 +88,42 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             )}
           </button>
 
+          {/* Arcade BGM Toggle */}
+          {onToggleBgm && (
+            <button
+              type="button"
+              onClick={onToggleBgm}
+              className={`px-2.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all ${
+                !isBgmMuted
+                  ? 'bg-amber-100/95 text-amber-900 border-amber-400 ring-2 ring-amber-300/70'
+                  : 'bg-white/90 text-slate-500 border-slate-200'
+              }`}
+              title={!isBgmMuted ? '오락실 배경음악 끄기' : '오락실 배경음악 켜기'}
+            >
+              {!isBgmMuted ? (
+                <>
+                  <span className="flex items-end gap-0.5 h-3">
+                    <span className="w-1 bg-amber-600 rounded-full h-2 animate-pulse" />
+                    <span className="w-1 bg-amber-600 rounded-full h-3 animate-pulse [animation-delay:150ms]" />
+                    <span className="w-1 bg-amber-600 rounded-full h-1.5 animate-pulse [animation-delay:300ms]" />
+                  </span>
+                  <span>음악 ON 🎵</span>
+                </>
+              ) : (
+                <>
+                  <Music className="w-3.5 h-3.5 text-slate-400" />
+                  <span>음악 OFF</span>
+                </>
+              )}
+            </button>
+          )}
+
           {/* Sound Toggle */}
           <button
             type="button"
             onClick={onToggleMute}
             className="p-2 rounded-xl bg-white/90 hover:bg-white text-slate-700 border border-slate-200 shadow-xs cursor-pointer active:scale-95 transition-all"
-            title={isMuted ? '소리 켜기' : '소리 끄기'}
+            title={isMuted ? '효과음 켜기' : '효과음 끄기'}
           >
             {isMuted ? (
               <VolumeX className="w-4 h-4 text-rose-500" />

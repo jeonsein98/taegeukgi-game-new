@@ -48,7 +48,7 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
   const [draggingPieceId, setDraggingPieceId] = useState<PieceId | null>(null);
 
   const calculateTilt = (pointX: number, pointY: number) => {
-    const boardEl = document.getElementById('taegeukgi-board');
+    const boardEl = document.getElementById('taegeukgi-flag-board');
     if (!boardEl) return -56.31;
     const rect = boardEl.getBoundingClientRect();
 
@@ -79,11 +79,7 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
     // If approaching Gam or Ri -> tilt to +56.31°
     // If approaching Geon or Gon -> tilt to -56.31°
-    if (minGamRi < minGeonGon) {
-      return 56.31;
-    } else {
-      return -56.31;
-    }
+    return minGamRi < minGeonGon ? 56.31 : -56.31;
   };
 
   // Level 3 total remaining count
@@ -190,11 +186,12 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
                 {/* Draggable piece shape directly without box */}
                 <motion.div
-                  layout
                   whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.96 }}
                   whileDrag={{ scale: 1.18, zIndex: 100 }}
                   drag
+                  dragElastic={0}
+                  dragMomentum={false}
                   dragSnapToOrigin
                   onDragEnd={(_, info) =>
                     onDragEndPiece('taegeuk-red', info.point.x, info.point.y)
@@ -241,11 +238,12 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
                 {/* Draggable piece shape directly without box */}
                 <motion.div
-                  layout
                   whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.96 }}
                   whileDrag={{ scale: 1.18, zIndex: 100 }}
                   drag
+                  dragElastic={0}
+                  dragMomentum={false}
                   dragSnapToOrigin
                   onDragEnd={(_, info) =>
                     onDragEndPiece('taegeuk-blue', info.point.x, info.point.y)
@@ -302,17 +300,22 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
               {/* Draggable bar shape directly without box */}
               <motion.div
-                layout
                 whileHover={solidBarsRemaining > 0 ? { scale: 1.08 } : {}}
                 whileTap={solidBarsRemaining > 0 ? { scale: 0.96 } : {}}
                 drag={solidBarsRemaining > 0}
+                dragElastic={0}
+                dragMomentum={false}
                 dragSnapToOrigin
                 onDragStart={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, solid: true }));
-                  setDragTilt((prev) => ({ ...prev, solid: calculateTilt(info.point.x, info.point.y) }));
+                  const t = calculateTilt(info.point.x, info.point.y);
+                  setDragTilt((prev) => ({ ...prev, solid: t }));
                 }}
                 onDrag={(_, info) => {
-                  setDragTilt((prev) => ({ ...prev, solid: calculateTilt(info.point.x, info.point.y) }));
+                  const t = calculateTilt(info.point.x, info.point.y);
+                  if (t !== dragTilt.solid) {
+                    setDragTilt((prev) => ({ ...prev, solid: t }));
+                  }
                 }}
                 onDragEnd={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, solid: false }));
@@ -390,17 +393,22 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
               {/* Draggable bar shape directly without box */}
               <motion.div
-                layout
                 whileHover={brokenBarsRemaining > 0 ? { scale: 1.08 } : {}}
                 whileTap={brokenBarsRemaining > 0 ? { scale: 0.96 } : {}}
                 drag={brokenBarsRemaining > 0}
+                dragElastic={0}
+                dragMomentum={false}
                 dragSnapToOrigin
                 onDragStart={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, broken: true }));
-                  setDragTilt((prev) => ({ ...prev, broken: calculateTilt(info.point.x, info.point.y) }));
+                  const t = calculateTilt(info.point.x, info.point.y);
+                  setDragTilt((prev) => ({ ...prev, broken: t }));
                 }}
                 onDrag={(_, info) => {
-                  setDragTilt((prev) => ({ ...prev, broken: calculateTilt(info.point.x, info.point.y) }));
+                  const t = calculateTilt(info.point.x, info.point.y);
+                  if (t !== dragTilt.broken) {
+                    setDragTilt((prev) => ({ ...prev, broken: t }));
+                  }
                 }}
                 onDragEnd={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, broken: false }));

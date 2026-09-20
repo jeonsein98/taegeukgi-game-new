@@ -3,8 +3,35 @@
 class SoundEngine {
   private ctx: AudioContext | null = null;
   public isMuted: boolean = false;
+  public isBgmMuted: boolean = false;
+  public isBgmPlaying: boolean = false;
 
-  private initCtx() {
+  // BGM Synthesizer Nodes & State
+  private bgmMasterGain: GainNode | null = null;
+  private bgmFilter: BiquadFilterNode | null = null;
+  private bgmTimer: number | null = null;
+  private bgmStep: number = 0;
+  private nextStepTime: number = 0;
+  private isUnlocked: boolean = false;
+
+  constructor() {
+    // Setup global user gesture unlock listener for iOS/iPad Safari and Chrome
+    if (typeof window !== 'undefined') {
+      const unlockHandler = () => {
+        this.unlockAudio();
+        if (this.isUnlocked) {
+          window.removeEventListener('pointerdown', unlockHandler);
+          window.removeEventListener('touchstart', unlockHandler);
+          window.removeEventListener('click', unlockHandler);
+        }
+      };
+      window.addEventListener('pointerdown', unlockHandler, { passive: true });
+      window.addEventListener('touchstart', unlockHandler, { passive: true });
+      window.addEventListener('click', unlockHandler, { passive: true });
+    }
+  }
+
+  public initCtx(): AudioContext | null {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
@@ -13,6 +40,229 @@ class SoundEngine {
     }
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
+    }
+    return this.ctx;
+  }
+
+  public unlockAudio() {
+    this.initCtx();
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().then(() => {
+          this.isUnlocked = true;
+          // If BGM was requested, ensure loop is running at current time
+          if (this.isBgmPlaying && !this.isBgmMuted && !this.isMuted) {
+            this.nextStepTime = (this.ctx?.currentTime || 0) + 0.05;
+            this.scheduleBgmLoop();
+          }
+        }).catch(() => {});
+      } else {
+        this.isUnlocked = true;
+      }
+    }
+  }
+
+  // =========================================================================
+  // RETRO ARCADE BGM SYNTHESIZER (Audible, Catchy, Chiptune Loop)
+  // =========================================================================
+  public startBgm() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+
+      // Initialize Master Gain & Filter once
+      if (!this.bgmMasterGain) {
+        this.bgmMasterGain = this.ctx.createGain();
+        this.bgmFilter = this.ctx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.setValueAtTime(3200, this.ctx.currentTime); // Warm 8-bit chiptune filter
+        this.bgmMasterGain.connect(this.bgmFilter);
+        this.bgmFilter.connect(this.ctx.destination);
+      }
+
+      const now = this.ctx.currentTime;
+      const targetVolume = this.isBgmMuted || this.isMuted ? 0 : 0.28; // Clear, comfortable arcade volume
+      this.bgmMasterGain.gain.cancelScheduledValues(now);
+      this.bgmMasterGain.gain.setValueAtTime(targetVolume, now);
+
+      this.isBgmPlaying = true;
+
+      // Always reset next step to current time + 0.05s so it starts immediately
+      this.nextStepTime = now + 0.05;
+
+      if (this.bgmTimer) {
+        window.clearTimeout(this.bgmTimer);
+        this.bgmTimer = null;
+      }
+
+      this.scheduleBgmLoop();
+    } catch {
+      // AudioContext fallback
+    }
+  }
+
+  public stopBgm() {
+    this.isBgmPlaying = false;
+    if (this.bgmTimer) {
+      window.clearTimeout(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+    if (this.bgmMasterGain && this.ctx) {
+      const now = this.ctx.currentTime;
+      this.bgmMasterGain.gain.cancelScheduledValues(now);
+      this.bgmMasterGain.gain.setValueAtTime(0, now);
+    }
+  }
+
+  public toggleBgm(): boolean {
+    this.unlockAudio();
+
+    if (this.isBgmPlaying && !this.isBgmMuted) {
+      // Turn OFF
+      this.isBgmMuted = true;
+      if (this.bgmMasterGain && this.ctx) {
+        const now = this.ctx.currentTime;
+        this.bgmMasterGain.gain.cancelScheduledValues(now);
+        this.bgmMasterGain.gain.setValueAtTime(0, now);
+      }
+      return false;
+    } else {
+      // Turn ON
+      this.isBgmMuted = false;
+      this.startBgm();
+      if (this.bgmMasterGain && this.ctx) {
+        const now = this.ctx.currentTime;
+        this.bgmMasterGain.gain.cancelScheduledValues(now);
+        this.bgmMasterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.28, now);
+      }
+      return true;
+    }
+  }
+
+  private scheduleBgmLoop = () => {
+    if (!this.isBgmPlaying || !this.ctx || !this.bgmMasterGain) return;
+
+    try {
+      const now = this.ctx.currentTime;
+
+      // If context drifted or was suspended while playing, resync to now
+      if (this.nextStepTime < now - 0.25) {
+        this.nextStepTime = now + 0.02;
+      }
+
+      // 138 BPM Upbeat 8-bit Tempo (8th note = 0.2174s)
+      const stepDuration = 0.2174;
+      const lookahead = 0.20;
+
+      while (this.nextStepTime < now + lookahead) {
+        this.playArcadeStep(this.bgmStep, this.nextStepTime, stepDuration);
+        this.nextStepTime += stepDuration;
+        this.bgmStep = (this.bgmStep + 1) % 32; // 32-step cheerful arcade loop
+      }
+    } catch {
+      // Keep scheduling even if one step had a minor hiccup
+    }
+
+    this.bgmTimer = window.setTimeout(this.scheduleBgmLoop, 35);
+  };
+
+  private playArcadeStep(step: number, targetTime: number, dur: number) {
+    if (!this.ctx || !this.bgmMasterGain || this.isBgmMuted || this.isMuted) return;
+
+    try {
+      // WebKit safety: time must always be in the future relative to currentTime
+      const now = this.ctx.currentTime;
+      const time = Math.max(targetTime, now + 0.005);
+
+      // Cheerful Korean Flag Arcade Melody (Pentatonic & Major 8-bit)
+      // 32-step upbeat melody:
+      // Bar 1: Do-Mi-Sol-HighDo | La-Sol-Mi-Re
+      // Bar 2: Do-Re-Mi-Sol | La-Ti-HighDo-Rest
+      // Bar 3: Sol-Mi-Do-Mi | Fa-La-Sol-Mi
+      // Bar 4: Re-Mi-Fa-Re | Do-Mi-Do-Rest
+      const melodySeq: number[] = [
+        523.25, 659.25, 783.99, 1046.5, 880.00, 783.99, 659.25, 587.33,
+        523.25, 587.33, 659.25, 783.99, 880.00, 987.77, 1046.5, 0,
+        783.99, 659.25, 523.25, 659.25, 698.46, 880.00, 783.99, 659.25,
+        587.33, 659.25, 698.46, 587.33, 523.25, 659.25, 523.25, 0,
+      ];
+
+      // Bouncy Walking 8-bit Bass
+      const bassSeq: number[] = [
+        130.81, 196.00, 130.81, 261.63, 174.61, 220.00, 130.81, 196.00,
+        130.81, 146.83, 164.81, 196.00, 174.61, 196.00, 130.81, 196.00,
+        196.00, 164.81, 130.81, 164.81, 174.61, 220.00, 196.00, 164.81,
+        146.83, 164.81, 174.61, 146.83, 130.81, 196.00, 130.81, 196.00,
+      ];
+
+      const melodyFreq = melodySeq[step];
+      const bassFreq = bassSeq[step];
+
+      // 1. Lead Melody Voice (Crisp Square Wave with snappy decay)
+      if (melodyFreq > 0) {
+        const osc = this.ctx.createOscillator();
+        const noteGain = this.ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(melodyFreq, time);
+
+        const noteLen = dur * 0.72;
+        noteGain.gain.setValueAtTime(0.18, time);
+        noteGain.gain.linearRampToValueAtTime(0.005, time + noteLen);
+
+        osc.connect(noteGain);
+        noteGain.connect(this.bgmMasterGain);
+
+        osc.start(time);
+        osc.stop(time + noteLen + 0.02);
+      }
+
+      // 2. Punchy Bouncy Bass Voice (Triangle wave)
+      if (bassFreq > 0) {
+        const bassOsc = this.ctx.createOscillator();
+        const bassGain = this.ctx.createGain();
+
+        bassOsc.type = 'triangle';
+        bassOsc.frequency.setValueAtTime(bassFreq, time);
+
+        const bassLen = dur * 0.82;
+        bassGain.gain.setValueAtTime(0.25, time);
+        bassGain.gain.linearRampToValueAtTime(0.005, time + bassLen);
+
+        bassOsc.connect(bassGain);
+        bassGain.connect(this.bgmMasterGain);
+
+        bassOsc.start(time);
+        bassOsc.stop(time + bassLen + 0.02);
+      }
+
+      // 3. Arcade Percussion (Crisp 8-bit drum beats on 2 & 4)
+      if (step % 2 === 0) {
+        const percOsc = this.ctx.createOscillator();
+        const percGain = this.ctx.createGain();
+
+        percOsc.type = 'sawtooth';
+        // Hi-hat tick on beat 1/3, Snare pop on beat 2/4
+        const isSnare = step % 4 === 2;
+        percOsc.frequency.setValueAtTime(isSnare ? 600 : 1800, time);
+        percOsc.frequency.linearRampToValueAtTime(80, time + 0.04);
+
+        const pVol = isSnare ? 0.08 : 0.04;
+        percGain.gain.setValueAtTime(pVol, time);
+        percGain.gain.linearRampToValueAtTime(0.001, time + 0.04);
+
+        percOsc.connect(percGain);
+        percGain.connect(this.bgmMasterGain);
+
+        percOsc.start(time);
+        percOsc.stop(time + 0.05);
+      }
+    } catch {
+      // Ignore individual step scheduling errors
     }
   }
 
