@@ -195,14 +195,38 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentScreen, gameStarted, isCompleted]);
 
-  // Fullscreen support for iPad / Tablets
-  // On iOS / iPadOS Safari, calling native requestFullscreen() or webkitRequestFullscreen()
-  // on arbitrary HTML elements triggers Apple's security notice:
-  // "전체화면인 상태에서 입력하는 것 같습니다" (You seem to be typing in full screen)
-  // whenever any text input (e.g., student name entry) gains focus.
-  // Standard CSS-based standalone viewport filling completely prevents this warning while
-  // giving the exact same full 100dvh immersive experience.
+  // Detect iPad and iPadOS devices (including iPadOS 13+ which reports MacIntel with touch)
+  const isIPadOrIOS = (): boolean => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isIPadOS = navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
+    return isIOS || isIPadOS;
+  };
+
+  // Fullscreen support:
+  // On iPad / iPadOS Safari, invoking native requestFullscreen() or webkitRequestFullscreen()
+  // causes Safari's anti-spoofing security banner:
+  // "가짜 키보드로 개인정보를 탈취할 수 있다" / "전체화면인 상태에서 입력하는 것 같습니다"
+  // to repeatedly appear on touches.
+  // As requested: On iPad/iPadOS, we strictly disable native Fullscreen API and use
+  // position:fixed; inset:0; width:100vw; height:100dvh; overflow:hidden CSS fullscreen.
+  // Desktop and Android retain standard native Fullscreen API.
   useEffect(() => {
+    // If iPad / iOS, ensure any leftover native fullscreen is exited to stop security warning
+    if (isIPadOrIOS()) {
+      const doc = document as any;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen().catch(() => {});
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        }
+      }
+      return;
+    }
+
+    // For Desktop / Android: Keep native Fullscreen change listener
     const handleFsChange = () => {
       const doc = document as any;
       const isNativeFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
@@ -219,23 +243,23 @@ export default function App() {
   }, [isFullscreen]);
 
   const toggleFullscreen = () => {
+    if (isIPadOrIOS()) {
+      // iPad/iPadOS: Pure CSS fullscreen. NEVER invoke requestFullscreen or webkitRequestFullscreen.
+      setIsFullscreen((prev) => !prev);
+      return;
+    }
+
+    // Desktop / Android: Standard Fullscreen API
     const doc = document as any;
     const isCurrentlyFs = isFullscreen;
 
     if (!isCurrentlyFs) {
       setIsFullscreen(true);
-      // For desktop browsers (Chrome, Edge, Firefox) where native Fullscreen API is standard and doesn't trigger the iOS Safari typing warning,
-      // we can try native API if not on iOS/iPadOS touch devices.
-      const isAppleMobileDevice =
-        typeof navigator !== 'undefined' &&
-        (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-
-      if (!isAppleMobileDevice) {
-        const rootEl = (document.getElementById('app-root') || document.documentElement) as any;
-        if (rootEl.requestFullscreen) {
-          rootEl.requestFullscreen().catch(() => {});
-        }
+      const rootEl = (document.getElementById('app-root') || document.documentElement) as any;
+      if (rootEl.requestFullscreen) {
+        rootEl.requestFullscreen().catch(() => {});
+      } else if (rootEl.webkitRequestFullscreen) {
+        rootEl.webkitRequestFullscreen();
       }
     } else {
       setIsFullscreen(false);
@@ -798,6 +822,22 @@ export default function App() {
   return (
     <div
       id="app-root"
+      style={
+        isFullscreen
+          ? {
+              position: 'fixed',
+              inset: 0,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              height: '100dvh',
+              overflow: 'hidden',
+              zIndex: 50,
+            }
+          : undefined
+      }
       className={`relative w-full h-[100dvh] max-h-[100dvh] overflow-hidden select-none bg-slate-100 text-slate-800 ${
         isFullscreen ? 'fixed inset-0 z-50 w-screen h-[100dvh]' : ''
       }`}

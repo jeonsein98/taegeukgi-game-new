@@ -7,6 +7,7 @@ import {
   formatRankingTime,
   getFriendlyModeName,
   normalizeModeKey,
+  isRealUserRecord,
 } from '../utils/ranking';
 import { sounds } from '../utils/audio';
 import {
@@ -47,11 +48,15 @@ export const ArcadeLeaderboard: React.FC<ArcadeLeaderboardProps> = ({
 
   if (!isOpen) return null;
 
+  // Normalize active filter
+  const normalizedFilter = filter === 'all' ? 'all' : normalizeModeKey(filter);
+
   // Filter and sort records by elapsedSeconds ascending (fastest first), then timestamp
   const filteredRecords = records
+    .filter(isRealUserRecord)
     .filter((r) => {
-      if (filter === 'all') return true;
-      return normalizeModeKey(r.mode) === normalizeModeKey(filter);
+      if (normalizedFilter === 'all') return true;
+      return normalizeModeKey(r.mode) === normalizedFilter;
     })
     .sort((a, b) => {
       if (a.elapsedSeconds !== b.elapsedSeconds) {
@@ -146,11 +151,14 @@ export const ArcadeLeaderboard: React.FC<ArcadeLeaderboardProps> = ({
               [
                 { id: 'all', label: '전체 순위', icon: '🏆' },
                 { id: 'level1', label: '1단계 터치', icon: '👆' },
-                { id: 'drag', label: '2단계 드래그', icon: '🖐️' },
+                { id: 'level2', label: '2단계 드래그', icon: '🖐️' },
                 { id: 'level3', label: '3단계 괘조립', icon: '🧩' },
               ] as const
             ).map((tab) => {
-              const active = filter === tab.id;
+              const active =
+                tab.id === 'all'
+                  ? normalizedFilter === 'all'
+                  : normalizedFilter === tab.id;
               return (
                 <button
                   key={tab.id}

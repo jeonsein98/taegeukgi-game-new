@@ -265,10 +265,10 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
                 type="button"
                 onClick={() => {
                   sounds.playSelect();
-                  onSelectMode('drag');
+                  onSelectMode('level2');
                 }}
                 className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between ${
-                  mode === 'drag'
+                  mode === 'level2' || mode === 'drag'
                     ? 'bg-sky-50 border-sky-500 shadow-md ring-2 ring-sky-300'
                     : 'bg-white border-slate-200 hover:border-sky-300 hover:bg-sky-50/50 hover:shadow-xs'
                 }`}
@@ -276,7 +276,7 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1.5">
                     <span className="text-xl">🖐️</span>
-                    {mode === 'drag' ? (
+                    {mode === 'level2' || mode === 'drag' ? (
                       <span className="text-[10px] font-black bg-sky-600 text-white px-2 py-0.5 rounded-full">
                         방금 완료!
                       </span>
@@ -293,7 +293,7 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 text-center">
                   <span className="inline-block text-xs font-black text-sky-700">
-                    {mode === 'drag' ? '이 단계 다시하기 ↺' : '2단계 시작하기 →'}
+                    {mode === 'level2' || mode === 'drag' ? '이 단계 다시하기 ↺' : '2단계 시작하기 →'}
                   </span>
                 </div>
               </button>
