@@ -50,6 +50,7 @@ class SoundEngine {
       if (this.ctx.state === 'suspended') {
         this.ctx.resume().then(() => {
           this.isUnlocked = true;
+          this.playSilentBuffer();
           // If BGM was requested, ensure loop is running at current time
           if (this.isBgmPlaying && !this.isBgmMuted && !this.isMuted) {
             this.nextStepTime = (this.ctx?.currentTime || 0) + 0.05;
@@ -58,7 +59,22 @@ class SoundEngine {
         }).catch(() => {});
       } else {
         this.isUnlocked = true;
+        this.playSilentBuffer();
       }
+    }
+  }
+
+  // Play a tiny silent buffer - the gold standard for unlocking iOS/iPad Safari Web Audio
+  private playSilentBuffer() {
+    if (!this.ctx) return;
+    try {
+      const buffer = this.ctx.createBuffer(1, 1, 22050);
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.ctx.destination);
+      source.start(0);
+    } catch {
+      // ignore
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameMode, ArcadeRankRecord } from '../types';
 import {
   getRankingRecords,
@@ -6,6 +6,7 @@ import {
   resetRankingRecords,
   formatRankingTime,
   getFriendlyModeName,
+  normalizeModeKey,
 } from '../utils/ranking';
 import { sounds } from '../utils/audio';
 import {
@@ -33,20 +34,31 @@ export const ArcadeLeaderboard: React.FC<ArcadeLeaderboardProps> = ({
   initialFilterMode = 'all',
 }) => {
   const [filter, setFilter] = useState<GameMode | 'all'>(initialFilterMode);
-  const [records, setRecords] = useState<ArcadeRankRecord[]>(() => getRankingRecords());
+  const [records, setRecords] = useState<ArcadeRankRecord[]>([]);
   const [confirmReset, setConfirmReset] = useState<boolean>(false);
+
+  // Sync records whenever modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      setRecords(getRankingRecords());
+      setFilter(initialFilterMode);
+    }
+  }, [isOpen, initialFilterMode]);
 
   if (!isOpen) return null;
 
-  // Filter and sort records by elapsedSeconds ascending (fastest first)
+  // Filter and sort records by elapsedSeconds ascending (fastest first), then timestamp
   const filteredRecords = records
     .filter((r) => {
       if (filter === 'all') return true;
-      const normMode = r.mode === 'click' ? 'level1' : r.mode;
-      const normFilter = filter === 'click' ? 'level1' : filter;
-      return normMode === normFilter;
+      return normalizeModeKey(r.mode) === normalizeModeKey(filter);
     })
-    .sort((a, b) => a.elapsedSeconds - b.elapsedSeconds);
+    .sort((a, b) => {
+      if (a.elapsedSeconds !== b.elapsedSeconds) {
+        return a.elapsedSeconds - b.elapsedSeconds;
+      }
+      return a.timestamp - b.timestamp;
+    });
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();

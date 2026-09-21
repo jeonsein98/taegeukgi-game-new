@@ -360,8 +360,10 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
                     onChange={(e) => setStudentName(e.target.value)}
                     placeholder="이름 또는 별명 (예: 김민준, 태극용사)"
                     maxLength={20}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
                     className="flex-1 px-4 py-3 bg-white border-2 border-amber-300 focus:border-amber-500 rounded-xl text-base font-bold text-slate-800 outline-none shadow-xs text-center"
-                    autoFocus
                   />
                   <button
                     type="submit"

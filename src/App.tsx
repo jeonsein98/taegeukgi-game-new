@@ -196,12 +196,17 @@ export default function App() {
   }, [currentScreen, gameStarted, isCompleted]);
 
   // Fullscreen support for iPad / Tablets
+  // On iOS / iPadOS Safari, calling native requestFullscreen() or webkitRequestFullscreen()
+  // on arbitrary HTML elements triggers Apple's security notice:
+  // "전체화면인 상태에서 입력하는 것 같습니다" (You seem to be typing in full screen)
+  // whenever any text input (e.g., student name entry) gains focus.
+  // Standard CSS-based standalone viewport filling completely prevents this warning while
+  // giving the exact same full 100dvh immersive experience.
   useEffect(() => {
     const handleFsChange = () => {
       const doc = document as any;
       const isNativeFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
-      // If native fullscreen was dismissed via system gesture or Esc, sync state
-      if (!isNativeFs) {
+      if (!isNativeFs && isFullscreen) {
         setIsFullscreen(false);
       }
     };
@@ -211,26 +216,35 @@ export default function App() {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
     };
-  }, []);
+  }, [isFullscreen]);
 
   const toggleFullscreen = () => {
     const doc = document as any;
-    const rootEl = (document.getElementById('app-root') || document.documentElement) as any;
-    const isCurrentlyFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || isFullscreen);
+    const isCurrentlyFs = isFullscreen;
 
     if (!isCurrentlyFs) {
       setIsFullscreen(true);
-      if (rootEl.requestFullscreen) {
-        rootEl.requestFullscreen().catch(() => {});
-      } else if (rootEl.webkitRequestFullscreen) {
-        rootEl.webkitRequestFullscreen();
+      // For desktop browsers (Chrome, Edge, Firefox) where native Fullscreen API is standard and doesn't trigger the iOS Safari typing warning,
+      // we can try native API if not on iOS/iPadOS touch devices.
+      const isAppleMobileDevice =
+        typeof navigator !== 'undefined' &&
+        (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+      if (!isAppleMobileDevice) {
+        const rootEl = (document.getElementById('app-root') || document.documentElement) as any;
+        if (rootEl.requestFullscreen) {
+          rootEl.requestFullscreen().catch(() => {});
+        }
       }
     } else {
       setIsFullscreen(false);
-      if (doc.exitFullscreen) {
-        doc.exitFullscreen().catch(() => {});
-      } else if (doc.webkitExitFullscreen) {
-        doc.webkitExitFullscreen();
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen().catch(() => {});
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        }
       }
     }
   };

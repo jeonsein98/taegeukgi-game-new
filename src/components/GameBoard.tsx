@@ -385,18 +385,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 top: `${(OFFICIAL_SLOTS.geon.cy / 600) * 100}%`,
                 width: '19%',
                 height: '19%',
-                transform: `translate(-50%, -50%) rotate(${OFFICIAL_SLOTS.geon.rotation}deg)${
-                  isMatchedTarget('geon') ? ' scale(1.06)' : ''
-                }`,
+                transform: `translate(-50%, -50%) rotate(${OFFICIAL_SLOTS.geon.rotation}deg)`,
               }}
               className={`absolute rounded-xl flex flex-col items-center justify-center transition-all z-20 cursor-pointer ${
                 placedPieces['geon']
                   ? 'pointer-events-none'
-                  : isMatchedTarget('geon')
-                  ? 'bg-amber-300/10 cursor-pointer'
-                  : isClickTarget('geon')
-                  ? 'hover:bg-slate-200/20'
-                  : 'hover:bg-amber-50/10'
+                  : 'hover:bg-slate-200/10'
               }`}
               title="건괘 (하늘 ☰)"
             >
@@ -422,11 +416,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               className={`absolute rounded-xl flex flex-col items-center justify-center transition-all z-20 cursor-pointer ${
                 placedPieces['gon']
                   ? 'pointer-events-none'
-                  : isMatchedTarget('gon')
-                  ? 'bg-amber-300/10 cursor-pointer'
-                  : isClickTarget('gon')
-                  ? 'hover:bg-slate-200/20'
-                  : 'hover:bg-amber-50/10'
+                  : 'hover:bg-slate-200/10'
               }`}
               title="곤괘 (땅 ☷)"
             >
@@ -452,11 +442,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               className={`absolute rounded-xl flex flex-col items-center justify-center transition-all z-20 cursor-pointer ${
                 placedPieces['gam']
                   ? 'pointer-events-none'
-                  : isMatchedTarget('gam')
-                  ? 'bg-amber-300/10 cursor-pointer'
-                  : isClickTarget('gam')
-                  ? 'hover:bg-slate-200/20'
-                  : 'hover:bg-amber-50/10'
+                  : 'hover:bg-slate-200/10'
               }`}
               title="감괘 (물 ☵)"
             >
@@ -482,11 +468,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               className={`absolute rounded-xl flex flex-col items-center justify-center transition-all z-20 cursor-pointer ${
                 placedPieces['ri']
                   ? 'pointer-events-none'
-                  : isMatchedTarget('ri')
-                  ? 'bg-amber-300/10 cursor-pointer'
-                  : isClickTarget('ri')
-                  ? 'hover:bg-slate-200/20'
-                  : 'hover:bg-amber-50/10'
+                  : 'hover:bg-slate-200/10'
               }`}
               title="리괘 (불 ☲)"
             >
@@ -521,16 +503,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                     top: `${(slot.cy / 600) * 100}%`,
                     width: '18%',
                     height: '6%',
-                    transform: `translate(-50%, -50%) rotate(${barRotation}deg)${
-                      isTargetType ? ' scale(1.06)' : ''
-                    }`,
+                    transform: `translate(-50%, -50%) rotate(${barRotation}deg)`,
                   }}
                   className={`absolute rounded-lg transition-all z-20 cursor-pointer flex items-center justify-center ${
                     isPlaced
                       ? 'pointer-events-none'
-                      : isTargetType
-                      ? 'bg-amber-400/30 ring-2 ring-amber-400 border border-amber-500 animate-pulse'
-                      : 'hover:bg-purple-100/40'
+                      : 'hover:bg-slate-200/10'
                   }`}
                   title={slot.label}
                 />

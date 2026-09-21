@@ -110,17 +110,17 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
       {/* Tray Header & Instructions */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
         <div className="flex items-center gap-2.5">
-          <div
-            className={`w-8 h-8 rounded-full text-white flex items-center justify-center font-black text-sm shadow-xs ${
-              isLevel3
-                ? 'bg-purple-600'
-                : mode === 'level1' || mode === 'click'
-                ? 'bg-blue-600'
-                : 'bg-amber-500'
-            }`}
-          >
-            {isLevel3 ? level3TotalRemaining : unplacedPieces.length}
-          </div>
+          {!isLevel3 && (
+            <div
+              className={`w-8 h-8 rounded-full text-white flex items-center justify-center font-black text-sm shadow-xs ${
+                mode === 'level1' || mode === 'click'
+                  ? 'bg-blue-600'
+                  : 'bg-amber-500'
+              }`}
+            >
+              {unplacedPieces.length}
+            </div>
+          )}
           <div>
             <h3 className="font-black text-slate-800 text-sm sm:text-base flex items-center gap-1.5">
               <span>
@@ -128,13 +128,11 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
                   ? '3단계 : 괘(卦) 구성 막대 및 태극 보관함'
                   : '태극기 구성요소 조각 보관함'}
               </span>
-              <span className="text-xs font-semibold text-slate-500">
-                (
-                {isLevel3
-                  ? `${level3TotalRemaining}개 남음`
-                  : `${unplacedPieces.length}개 남음`}
-                )
-              </span>
+              {!isLevel3 && (
+                <span className="text-xs font-semibold text-slate-500">
+                  ({unplacedPieces.length}개 남음)
+                </span>
+              )}
             </h3>
             {!isLevel3 && (
               <p className="text-xs font-bold text-slate-600">
@@ -146,22 +144,11 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
           </div>
         </div>
 
-        {/* Selected piece / bar indicator */}
-        {selectedPieceId && (
+        {/* Selected piece indicator in Level 1 only */}
+        {selectedPieceId && (mode === 'level1' || mode === 'click') && (
           <div className="bg-blue-600 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-xs flex items-center gap-1.5 animate-bounce">
             <MousePointerClick className="w-3.5 h-3.5" />
             <span>선택 중: {TAEGEUKGI_PIECES[selectedPieceId]?.name}</span>
-          </div>
-        )}
-        {selectedBarType && (
-          <div className="bg-purple-600 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-xs flex items-center gap-1.5 animate-bounce">
-            <MousePointerClick className="w-3.5 h-3.5" />
-            <span>
-              선택 중:{' '}
-              {selectedBarType === 'solid'
-                ? '긴 막대 (양효 ㅡ)'
-                : '짧은 막대 (음효 - -)'}
-            </span>
           </div>
         )}
       </div>
@@ -277,18 +264,9 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
           {/* 3. Solid Bar (긴 막대 / 양효 ㅡ) */}
           <div className="flex flex-col items-center justify-between text-center select-none py-1">
-            <div className="w-full flex items-center justify-between mb-1 px-1">
+            <div className="w-full flex items-center justify-center mb-1 px-1">
               <span className="text-xs font-black text-purple-800">
                 양효 (陽爻)
-              </span>
-              <span
-                className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
-                  solidBarsRemaining > 0
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-slate-200 text-slate-500'
-                }`}
-              >
-                {solidBarsRemaining}개 남음
               </span>
             </div>
 
@@ -300,9 +278,9 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
               {/* Draggable bar shape directly without box */}
               <motion.div
-                whileHover={solidBarsRemaining > 0 ? { scale: 1.08 } : {}}
-                whileTap={solidBarsRemaining > 0 ? { scale: 0.96 } : {}}
-                drag={solidBarsRemaining > 0}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.96 }}
+                drag
                 dragElastic={0}
                 dragMomentum={false}
                 dragSnapToOrigin
@@ -320,7 +298,7 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
                 onDragEnd={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, solid: false }));
                   setDragTilt((prev) => ({ ...prev, solid: -56.31 }));
-                  if (solidBarsRemaining > 0 && onDragEndBar) {
+                  if (onDragEndBar) {
                     onDragEndBar('solid', info.point.x, info.point.y);
                   }
                 }}
@@ -333,16 +311,12 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
                   rotate: { type: 'spring', stiffness: 350, damping: 25 },
                 }}
                 onClick={() => {
-                  if (solidBarsRemaining > 0 && onSelectBarType) {
+                  if (onSelectBarType) {
                     onSelectBarType(selectedBarType === 'solid' ? null : 'solid');
                   }
                 }}
                 style={{ touchAction: 'none' }}
-                className={`select-none relative z-10 flex items-center justify-center p-2 bg-transparent ${
-                  solidBarsRemaining === 0
-                    ? 'opacity-30 pointer-events-none'
-                    : 'cursor-grab active:cursor-grabbing'
-                }`}
+                className="select-none relative z-10 flex items-center justify-center p-2 bg-transparent cursor-grab active:cursor-grabbing"
               >
                 <div
                   style={{
@@ -370,18 +344,9 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
           {/* 4. Broken Bar (짧은 막대 / 음효 - -) */}
           <div className="flex flex-col items-center justify-between text-center select-none py-1">
-            <div className="w-full flex items-center justify-between mb-1 px-1">
+            <div className="w-full flex items-center justify-center mb-1 px-1">
               <span className="text-xs font-black text-purple-800">
                 음효 (陰爻)
-              </span>
-              <span
-                className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
-                  brokenBarsRemaining > 0
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-slate-200 text-slate-500'
-                }`}
-              >
-                {brokenBarsRemaining}개 남음
               </span>
             </div>
 
@@ -393,9 +358,9 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
 
               {/* Draggable bar shape directly without box */}
               <motion.div
-                whileHover={brokenBarsRemaining > 0 ? { scale: 1.08 } : {}}
-                whileTap={brokenBarsRemaining > 0 ? { scale: 0.96 } : {}}
-                drag={brokenBarsRemaining > 0}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.96 }}
+                drag
                 dragElastic={0}
                 dragMomentum={false}
                 dragSnapToOrigin
@@ -413,7 +378,7 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
                 onDragEnd={(_, info) => {
                   setIsDraggingBar((prev) => ({ ...prev, broken: false }));
                   setDragTilt((prev) => ({ ...prev, broken: -56.31 }));
-                  if (brokenBarsRemaining > 0 && onDragEndBar) {
+                  if (onDragEndBar) {
                     onDragEndBar('broken', info.point.x, info.point.y);
                   }
                 }}
@@ -426,16 +391,12 @@ export const PieceTray: React.FC<PieceTrayProps> = ({
                   rotate: { type: 'spring', stiffness: 350, damping: 25 },
                 }}
                 onClick={() => {
-                  if (brokenBarsRemaining > 0 && onSelectBarType) {
+                  if (onSelectBarType) {
                     onSelectBarType(selectedBarType === 'broken' ? null : 'broken');
                   }
                 }}
                 style={{ touchAction: 'none' }}
-                className={`select-none relative z-10 flex items-center justify-center p-2 bg-transparent ${
-                  brokenBarsRemaining === 0
-                    ? 'opacity-30 pointer-events-none'
-                    : 'cursor-grab active:cursor-grabbing'
-                }`}
+                className="select-none relative z-10 flex items-center justify-center p-2 bg-transparent cursor-grab active:cursor-grabbing"
               >
                 <div
                   style={{
