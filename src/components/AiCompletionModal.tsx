@@ -19,6 +19,7 @@ import {
   Medal,
   Flame,
   ListOrdered,
+  Home,
 } from 'lucide-react';
 
 interface AiCompletionModalProps {
@@ -26,6 +27,7 @@ interface AiCompletionModalProps {
   mode: GameMode;
   onRestart: () => void;
   onSelectMode: (mode: GameMode) => void;
+  onGoHome?: () => void;
   celebrationCharacter?: CelebrationCharacterType;
 }
 
@@ -34,6 +36,7 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
   mode,
   onRestart,
   onSelectMode,
+  onGoHome,
   celebrationCharacter = 'ryu-gwan-sun',
 }) => {
   const [studentName, setStudentName] = useState<string>('');
@@ -195,6 +198,21 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border-4 border-amber-300 overflow-hidden my-auto animate-in fade-in zoom-in duration-200">
         {/* Header Ribbon */}
         <div className="bg-gradient-to-r from-red-600 via-amber-500 to-blue-600 p-5 text-center text-white relative">
+          {onGoHome && (
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playSelect();
+                onGoHome();
+              }}
+              className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 px-3 py-1.5 rounded-xl bg-black/25 hover:bg-black/40 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 backdrop-blur-md border border-white/40 cursor-pointer transition-all shadow-xs"
+              title="처음 시작 화면(홈)으로 이동"
+            >
+              <Home className="w-3.5 h-3.5 text-amber-200" />
+              <span>홈으로</span>
+            </button>
+          )}
+
           <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border-2 border-white/40 shadow-inner">
             <Trophy className="w-9 h-9 text-amber-300 drop-shadow-md" />
           </div>
@@ -530,20 +548,33 @@ export const AiCompletionModal: React.FC<AiCompletionModalProps> = ({
 
         {/* Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-bold text-slate-500">
-            💡 위에서 도전하고 싶은 단계를 누르면 새로운 게임이 시작됩니다!
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              sounds.playSelect();
-              onRestart();
-            }}
-            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-98 text-white font-extrabold rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer text-sm ml-auto"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>현재 단계 다시하기</span>
-          </button>
+          {onGoHome && (
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playSelect();
+                onGoHome();
+              }}
+              className="px-4 py-2.5 bg-white hover:bg-slate-100 active:scale-95 text-slate-800 font-extrabold rounded-xl border-2 border-slate-300 hover:border-slate-400 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm"
+            >
+              <Home className="w-4 h-4 text-blue-600" />
+              <span>처음 화면(홈)으로</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playSelect();
+                onRestart();
+              }}
+              className="px-4 sm:px-5 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-extrabold rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>현재 단계 다시하기</span>
+            </button>
+          </div>
         </div>
       </div>
 

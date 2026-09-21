@@ -195,13 +195,53 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentScreen, gameStarted, isCompleted]);
 
-  // Detect iPad and iPadOS devices (including iPadOS 13+ which reports MacIntel with touch)
+  // Detect iPad and iPadOS devices comprehensively
+  // Covers:
+  // 1. Mobile Safari on iPad (/iPad/ in UA or platform)
+  // 2. iPadOS 13+ desktop-class Safari (UA has "Macintosh" / platform "MacIntel" or "Macintosh" with touch capabilities)
+  // 3. WebKit touch-callout detection & Apple vendor touch detection (excluding Android)
   const isIPadOrIOS = (): boolean => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent || '';
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isIPadOS = navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
-    return isIOS || isIPadOS;
+    const platform = navigator.platform || '';
+    const vendor = navigator.vendor || '';
+    const maxTouchPoints = navigator.maxTouchPoints || 0;
+    const hasTouch =
+      maxTouchPoints > 0 ||
+      'ontouchstart' in window ||
+      'ontouchend' in document ||
+      Boolean((navigator as any).msMaxTouchPoints);
+
+    // 1. Explicit iPad, iPhone, iPod in UA or platform
+    if (/iPad|iPhone|iPod/i.test(ua) || /iPad|iPhone|iPod/i.test(platform)) {
+      return true;
+    }
+
+    // 2. iPadOS 13+ Desktop mode: Reports Mac in userAgent/platform with touch screen
+    // Note: Apple has never manufactured a touchscreen Mac computer; any touch-capable "Mac" is an iPad.
+    if (/Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua) || /Macintosh|MacIntel|MacPPC|Mac68K/i.test(platform)) {
+      if (hasTouch) {
+        return true;
+      }
+    }
+
+    // 3. WebKit touch-callout check (unique to iOS/iPadOS WebKit, not supported on Android/PC)
+    if (
+      typeof CSS !== 'undefined' &&
+      CSS.supports &&
+      (CSS.supports('-webkit-touch-callout', 'none') || CSS.supports('-webkit-touch-callout', 'default'))
+    ) {
+      if (hasTouch && !/Android/i.test(ua)) {
+        return true;
+      }
+    }
+
+    // 4. Apple vendor with touch screen (excluding Android)
+    if (/Apple/i.test(vendor) && hasTouch && !/Android/i.test(ua)) {
+      return true;
+    }
+
+    return false;
   };
 
   // Fullscreen support:
@@ -213,8 +253,16 @@ export default function App() {
   // position:fixed; inset:0; width:100vw; height:100dvh; overflow:hidden CSS fullscreen.
   // Desktop and Android retain standard native Fullscreen API.
   useEffect(() => {
-    // If iPad / iOS, ensure any leftover native fullscreen is exited to stop security warning
+    // If iPad / iOS, permanently neutralize native Fullscreen API on prototypes
+    // and exit any active native fullscreen to guarantee the security warning NEVER appears
     if (isIPadOrIOS()) {
+      try {
+        const noop = () => Promise.resolve();
+        (Element.prototype as any).requestFullscreen = noop;
+        (Element.prototype as any).webkitRequestFullscreen = noop;
+        (Element.prototype as any).webkitEnterFullscreen = noop;
+      } catch {}
+
       const doc = document as any;
       if (doc.fullscreenElement || doc.webkitFullscreenElement) {
         if (doc.exitFullscreen) {
@@ -1244,6 +1292,12 @@ export default function App() {
           mode={mode}
           onRestart={initGame}
           onSelectMode={handleSelectModeFromModal}
+          onGoHome={() => {
+            sounds.playSelect();
+            setIsCompleted(false);
+            initGame();
+            setCurrentScreen('start');
+          }}
           celebrationCharacter={celebrationCharacter}
         />
       )}
